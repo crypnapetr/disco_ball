@@ -1,32 +1,52 @@
-/*
-   Uno sketch to drive a stepper motor using the AccelStepper library.
-   Demonstrates acceleration using run(). Prints results every second.
-   Runs stepper back and forth between limits. (Like Bounce demo program.)
-   Works with a ULN-2003 unipolar stepper driver, or a bipolar, constant voltage motor driver
-   such as the L298 or TB6612, or a step/direction constant current driver like the a4988.
-   Initial Creation: 10/15/21  --jkl  jlarson@pacifier.com
-      - Rev 1 - 11/7/21      -jkl
-      - Rev 2 = 12/14/21   -jkl
-*/
-// Include the AccelStepper Library
+/*************************************************************
+
+  This is a simple demo of sending and receiving some data.
+  Be sure to check out other examples!
+ *************************************************************/
+
+// Template ID, Device Name and Auth Token are provided by the Blynk.Cloud
+// See the Device Info tab, or Template settings
+#define BLYNK_TEMPLATE_ID           ""
+#define BLYNK_DEVICE_NAME           "Quickstart Device"
+#define BLYNK_AUTH_TOKEN            ""
+
+
+// Comment this out to disable prints and save space
+#define BLYNK_PRINT Serial
+
 #include <AccelStepper.h>
 #include <elapsedMillis.h>
 #include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
 #include <E131.h>
 
-#define channel_1_green 1 // the channel number to link to output 1 green.
 #define channel_0_red 0 // the channel number to link to output 1 red.
+#define channel_1_green 1 // the channel number to link to output 1 green.
 #define channel_2_blue 2 // the channel number to link to output 2 blue.
 
 // this sets the pin numbers to use as outputs.
-#define output_2_blue D2 // the pin to use as output 2 blue (D1).
+#define output_0_red D0 // the pin to use as output 0 red (down)
+#define output_1_green D1 // the pin to use as output 1 green (up)
+#define output_2_blue D2 // the pin to use as output 2 blue (spin)
 
+#define VPIN_BUTTON_6 V6
+#define VPIN_BUTTON_7 V7
+//#define channel_1_green 1 // the channel number to link to output 1 green.
 
+// this sets the pin numbers to use as outputs.
+//#define output_1_green D1 // the pin to use as output 1 green (D2).
 
-// ***** USER SETUP STUFF *****
-const char WIFI_SSID[] = "";  // replace with your SSID.
-const char WIFI_PASS[] = ""; // replace with your PASSWORD.
+char auth[] = BLYNK_AUTH_TOKEN;
 
+// Your WiFi credentials.
+// Set password to "" for open networks.
+char ssid[] = "";
+char pass[] = "";
+
+bool Up = false;
+bool Down = false;
+
+BlynkTimer timer;
 const int universe = 21; // this sets the universe number you are using.
 
 // this sets the channel number used by the output.
@@ -48,57 +68,84 @@ const int stepPin = 5;
 long Position = 0;
 long NewPosition = 0;
 
-// Creates an instance - Pick the version you want to use and un-comment it. That's the only required change.
-//AccelStepper myStepper(AccelStepper::FULL4WIRE, AIn1, AIn2, BIn1, BIn2);  // works for TB6612 (Bipolar, constant voltage, H-Bridge motor driver)
 AccelStepper myStepper(AccelStepper::FULL4WIRE, In1, In3, In2, In4);    // works for ULN2003 (Unipolar motor driver)
-//AccelStepper myStepper(AccelStepper::DRIVER, stepPin, dirPin);           // works for a4988 (Bipolar, constant current, step/direction driver)
-
 elapsedMillis printTime;
 
+// This function is called every time the Virtual Pin 6 state changes
+BLYNK_WRITE(V6)
+{
+  // Set incoming value from pin V6 to a variable
+  int value = param.asInt();
+  // Update state
+  Down = param.asInt();
 
+}
+BLYNK_WRITE(V7)
+{
+  // Set incoming value from pin V6 to a variable
+  int value = param.asInt();
+  // Update state
+  Up = param.asInt();
+
+}
+void myTimer() {
+
+  Serial.println("Timer");
+  
+}
 
 void setup() {
   Serial.begin(115200);
 
+  pinMode(output_0_red, OUTPUT); // set the pins chosen above as outputs.
+  digitalWrite(output_0_red, LOW); // set the pins chosen above to low / off.
+  pinMode(output_1_green, OUTPUT); // set the pins chosen above as outputs.
+  digitalWrite(output_1_green, LOW); // set the pins chosen above to low / off.
   pinMode(output_2_blue, OUTPUT); // set the pins chosen above as outputs.
   digitalWrite(output_2_blue, LOW); // set the pins chosen above to low / off.
-  
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+
+  WiFi.begin(ssid, pass);
   
   // set the maximum speed, acceleration factor, and the target position.
-  myStepper.setMaxSpeed(200.0);   // the motor accelerates to this speed exactly without overshoot. Try other values.
+  myStepper.setMaxSpeed(1000.0);   // the motor accelerates to this speed exactly without overshoot. Try other values.
   myStepper.setAcceleration(50.0);   // try other acceleration rates.
   Position = myStepper.currentPosition();
 
-  //myStepper.moveTo(100000); 
-  // For negative rotation
-  //myStepper.moveTo(-100000);    // This will demonstrate a move in the negative direction.
-  e131.begin(WIFI_SSID, WIFI_PASS);               /* via Unicast on the default port */
+  Blynk.begin(auth, ssid, pass, "blynk.cloud", 80);
+  // You can also specify server:
+  //Blynk.begin(auth, ssid, pass, "blynk.cloud", 80);
+  //Blynk.begin(auth, ssid, pass, IPAddress(192,168,1,100), 8080);
+
+  e131.begin(ssid, pass);               /* via Unicast on the default port */
+
+ //e131.begin(ssid, pass);               /* via Unicast on the default port */
   //   e131.beginMulticast(ssid, passphrase, universe); /* via Multicast for Universe 1 */
+  timer.setInterval(1500L, myTimer); 
 
 }
 int count = 0;    // tracks seconds to trigger an action if desired.
-void loop() {
-  float mSpeed;
-    uint16_t num_channels = e131.parsePacket();
-      if (num_channels) {
+void loop()
+{
+float mSpeed;
+  uint16_t num_channels = e131.parsePacket(); 
+  if (num_channels) {
       Serial.println("we have data");
       Serial.println(e131.data[channel_1_green]);
       Serial.println(e131.data[channel_0_red]);
       Serial.println(e131.data[channel_2_blue]);
-  
-      if (e131.data[channel_1_green] >= 200) //if channel value is greater then 127
+
+if (e131.data[channel_1_green] >= 200) //if channel value is greater then 127 - up
       {
         
-          myStepper.moveTo(Position + 4000);
+          myStepper.moveTo(Position + 0);
           NewPosition = myStepper.currentPosition();
  
       }
  
-      if (e131.data[channel_0_red] >= 200) //if channel value is greater then 127
+      if (e131.data[channel_0_red] >= 200) //if channel value is greater then 127 - down
       {
         
-          myStepper.moveTo(Position); 
+          myStepper.moveTo(Position - 3000); 
  
       }
 
@@ -113,19 +160,29 @@ void loop() {
           digitalWrite(output_2_blue, LOW); //turn relay on
       }
 
-      
-      if (printTime >= 10000) {    // reports speed and position each second
-          printTime = 0;
-          mSpeed = myStepper.speed();
-          Serial.print(mSpeed);
-          Serial.print("  ");
-          Serial.print(myStepper.currentPosition());
-          Serial.print("  ");
-          Serial.println(count);
-          
-        }
-    
-    }
-  
-  myStepper.run();
+  }
+
+
+  Blynk.run();  
+  timer.run();
+  // You can inject your own code or combine it with other sketches.
+  // Check other examples on how to communicate with Blynk. Remember
+  // to avoid delay() function!
+   if (Up){                                          // if condition 
+  //Stepper1(1, 10);                                     // steppermotor rotates 10 times 360 degree right
+  Serial.println("Going Up");
+          myStepper.moveTo(Position + 0);
+          NewPosition = myStepper.currentPosition();
+  }
+
+  if (Down){                                          // if condition 
+  //Stepper1(1, 10);                                     // steppermotor rotates 10 times 360 degree right
+  Serial.println("Going Down");
+         myStepper.moveTo(Position - 3000); 
+
+  }
+
+myStepper.run();
+
 }
+
